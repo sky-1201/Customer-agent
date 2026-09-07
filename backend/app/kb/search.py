@@ -1,5 +1,6 @@
 """知识库检索：FAQ / 故障说明语义检索（pgvector）"""
 from app.db.database import engine
+from app.kb import wrap_untrusted
 from app.kb.embedding import embed
 from app.utils.logger import get_logger
 
@@ -41,7 +42,7 @@ def search_faq(query: str, top_k: int = 3) -> str:
     parts = []
     for question, answer in rows:
         parts.append(f"【问题】{question}\n【答案】{answer}")
-    return "\n\n".join(parts)
+    return wrap_untrusted("\n\n".join(parts), "FAQ知识库")
 
 
 def search_troubleshooting(query: str, top_k: int = 3) -> str:
@@ -74,4 +75,4 @@ def search_troubleshooting(query: str, top_k: int = 3) -> str:
     parts = []
     for fault, cause, solution in rows:
         parts.append(f"【故障】{fault}\n【原因】{cause}\n【解决】{solution}")
-    return "\n\n".join(parts)
+    return wrap_untrusted("\n\n".join(parts), "故障知识库")

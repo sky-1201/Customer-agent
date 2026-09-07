@@ -3,7 +3,7 @@ from fastapi import APIRouter
 from langgraph.types import Command
 from pydantic import BaseModel
 
-from app.db.approval import get_approval, list_approvals, update_approval
+from app.db.approval import get_approval, get_approval_by_thread, list_approvals, update_approval
 from app.graph.main import main_graph
 from app.utils.logger import get_logger
 
@@ -20,6 +20,24 @@ class ApprovalRequest(BaseModel):
 def get_approvals():
     """待审批列表"""
     return list_approvals()
+
+
+@router.get("/approvals/status")
+async def approval_status(thread_id: str):
+    """客户端轮询审批结果（收到"等待审核"后定时查询）"""
+    approval = get_approval_by_thread(thread_id)
+    if approval is None:
+        return {"status": "none"}  # 尚未触发审批
+
+    if approval["status"] == "pending":
+        return {"status": "pending"}  # 还在等审批
+
+    # 已审批：从 checkpoint 读最终回复（resume 后 approval 节点写入的 messages）
+    config = {"configurable": {"thread_id": thread_id}}
+    snapshot = await main_graph.aget_state(config)
+    messages = snapshot.values.get("messages") or []
+    reply = messages[-1].content if messages else ""
+    return {"status": approval["status"], "reply": reply}
 
 
 @router.post("/approvals/{approval_id}")

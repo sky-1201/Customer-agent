@@ -2,10 +2,13 @@
 
 complex 分支：并行[技术诊断 ∥ 售后核实] → 决策交叉核验 → 审批/回复
 """
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.postgres import PostgresSaver
+from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Send
+from psycopg_pool import AsyncConnectionPool, ConnectionPool
 
+from app.config import DATABASE_URL
 from app.graph.aftersale import aftersale_node
 from app.graph.agent import agent_graph
 from app.graph.approval import approval_node
@@ -64,4 +67,19 @@ builder.add_edge("aftersale", "decision")
 builder.add_edge("decision", "approval")
 builder.add_edge("approval", END)
 
-main_graph = builder.compile(checkpointer=MemorySaver())
+# checkpoint 持久化到 PostgreSQL：
+# - 审批等待中服务重启，状态不丢（从 checkpoint 恢复继续等审批）
+# - 时间旅行：可回到任意历史状态排查
+# 用连接池（from_conn_string 是短连接 context manager，不适合模块级常驻 checkpointer）
+PG_CONN_STRING = DATABASE_URL.replace("+psycopg", "")  # 转 psycopg 原生连接字符串
+
+# 1. setup 用同步 autocommit 临时池：migration 含 CREATE INDEX CONCURRENTLY，不能在事务块里执行
+_setup_pool = ConnectionPool(conninfo=PG_CONN_STRING, kwargs={"autocommit": True})
+PostgresSaver(_setup_pool).setup()  # 建 checkpoint 表（幂等）
+_setup_pool.close()
+
+# 2. checkpointer 用异步池（ainvoke/astream 需要 AsyncPostgresSaver，同步版不支持异步方法）
+checkpoint_pool = AsyncConnectionPool(conninfo=PG_CONN_STRING, open=False)  # lifespan 里 open
+checkpointer = AsyncPostgresSaver(checkpoint_pool)
+
+main_graph = builder.compile(checkpointer=checkpointer)

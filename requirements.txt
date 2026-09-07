@@ -13,6 +13,7 @@ aiofiles>=23.2                  # FastAPI StaticFiles 依赖（托管前端静�
 
 # --- Agent 编排 ---
 langgraph>=0.2
+langgraph-checkpoint-postgres>=2.0   # PostgresSaver（checkpoint 持久化到 PostgreSQL）
 langchain-core>=0.2
 langchain-openai>=0.1           # OpenAI 兼容客户端（DeepSeek/Qwen 均走此接口）
 
@@ -20,7 +21,7 @@ langchain-openai>=0.1           # OpenAI 兼容客户端（DeepSeek/Qwen 均走�
 openai>=1.40                    # 底层 SDK（embedding 也可能用）
 
 # --- 数据库 ---
-psycopg[binary]>=3.1            # PostgreSQL 驱动
+psycopg[binary,pool]>=3.1       # PostgreSQL 驱动 + 连接池（PostgresSaver 用）
 pgvector>=0.2                   # pgvector Python 客户端
 sqlalchemy>=2.0
 

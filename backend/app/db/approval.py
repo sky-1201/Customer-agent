@@ -57,6 +57,15 @@ def list_approvals() -> list[dict]:
             return cur.fetchall()
 
 
+def get_approval_by_thread(thread_id: str) -> dict | None:
+    """按 thread_id 查审批单（客户端轮询审批结果用）"""
+    sql = "SELECT * FROM approvals WHERE thread_id = %s ORDER BY id DESC LIMIT 1"
+    with engine.raw_connection() as conn:
+        with conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(sql, (thread_id,))
+            return cur.fetchone()
+
+
 def get_approval(approval_id: int) -> dict | None:
     """审批详情（含 thread_id，供 resume 用）"""
     sql = "SELECT * FROM approvals WHERE id = %s"
