@@ -1,0 +1,19 @@
+# ============================================================
+# 服务层编排（可复现：换电脑 `docker compose up -d` 一条命令恢复）
+# ============================================================
+services:
+  postgres:
+    image: pgvector/pgvector:pg16          # 自带 pgvector 向量扩展
+    container_name: customer-agent-pg
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: customer_agent
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data    # 数据持久化（重启不丢）
+      # 首次启动自动建表（schema.sql 挂到 initdb 目录）
+      - ./data/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+
+volumes:
+  pgdata:

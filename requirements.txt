@@ -1,0 +1,31 @@
+# ============================================================
+# Python 依赖
+# 版本策略：开发期用范围约束（>= 下限），功能稳定后
+#          `pip freeze > requirements.txt` 锁定精确版本，保证换电脑完全复现
+# Python 版本：3.12（见 environment.yml）
+# ============================================================
+
+# --- Web 框架 ---
+fastapi>=0.110
+uvicorn[standard]>=0.29
+sse-starlette>=2.1              # SSE 流式推送（客服页"Agent 工作状态"）
+aiofiles>=23.2                  # FastAPI StaticFiles 依赖（托管前端静态文件）
+
+# --- Agent 编排 ---
+langgraph>=0.2
+langchain-core>=0.2
+langchain-openai>=0.1           # OpenAI 兼容客户端（DeepSeek/Qwen 均走此接口）
+
+# --- LLM / Embedding SDK ---
+openai>=1.40                    # 底层 SDK（embedding 也可能用）
+
+# --- 数据库 ---
+psycopg[binary]>=3.1            # PostgreSQL 驱动
+pgvector>=0.2                   # pgvector Python 客户端
+sqlalchemy>=2.0
+
+# --- 数据模型 ---
+pydantic>=2.6
+
+# --- 配置 ---
+python-dotenv>=1.0              # 读 .env 环境变量

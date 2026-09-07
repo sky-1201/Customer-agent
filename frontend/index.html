@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <title>智能客服 · 阶段1最简对话页</title>
+  <style>
+    body { font-family: sans-serif; max-width: 600px; margin: 40px auto; padding: 0 20px; }
+    #chat { border: 1px solid #ddd; border-radius: 8px; padding: 16px; min-height: 300px; }
+    .msg { margin: 8px 0; padding: 8px 12px; border-radius: 8px; max-width: 80%; }
+    .user { background: #e3f2fd; margin-left: auto; }
+    .assistant { background: #f5f5f5; }
+    #input { width: 75%; padding: 8px; }
+    button { padding: 8px 16px; }
+  </style>
+</head>
+<body>
+  <h2>智能客服（阶段1最简验证）</h2>
+  <div id="chat"></div>
+  <div style="margin-top:12px;">
+    <input id="input" placeholder="输入问题，如：怎么激活系统">
+    <button onclick="send()">发送</button>
+  </div>
+
+  <script>
+    const threadId = 'demo-' + Date.now();
+
+    function addMsg(role, text) {
+      const div = document.createElement('div');
+      div.className = 'msg ' + role;
+      div.textContent = text;
+      document.getElementById('chat').appendChild(div);
+    }
+
+    async function send() {
+      const input = document.getElementById('input');
+      const msg = input.value.trim();
+      if (!msg) return;
+      addMsg('user', msg);
+      input.value = '';
+
+      try {
+        const res = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: msg, thread_id: threadId })
+        });
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n\n');
+          buffer = lines.pop();
+          for (const line of lines) {
+            if (line.startsWith('data: ') && !line.includes('[DONE]')) {
+              const data = JSON.parse(line.slice(6));
+              addMsg('assistant', data.content);
+            }
+          }
+        }
+      } catch (e) {
+        addMsg('assistant', '请求失败：' + e.message);
+      }
+    }
+  </script>
+</body>
+</html>
