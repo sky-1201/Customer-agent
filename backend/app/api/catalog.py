@@ -41,3 +41,11 @@ def get_order_detail(order_id: int):
     if order is None:
         raise HTTPException(status_code=404, detail="订单不存在")
     return order
+
+
+@router.delete("/orders/{order_id}")
+def delete_order(order_id: int):
+    """删除订单"""
+    if not catalog.delete_order(order_id):
+        raise HTTPException(status_code=404, detail="订单不存在")
+    return {"status": "deleted"}

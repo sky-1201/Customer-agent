@@ -49,6 +49,20 @@ def create_order(product_id: int) -> dict:
     return {"id": order_id, "order_no": order_no}
 
 
+def delete_order(order_id: int) -> bool:
+    """删除订单（先删其维修记录，再删订单，避免外键约束）"""
+    sql_repairs = "DELETE FROM repairs WHERE order_id = %s"
+    sql_order = "DELETE FROM orders WHERE id = %s"
+    with engine.raw_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql_repairs, (order_id,))
+            cur.execute(sql_order, (order_id,))
+            deleted = cur.rowcount
+        conn.commit()  # ⚠️ raw_connection 不会自动 commit
+    logger.info("订单删除", extra={"order_id": order_id, "deleted": deleted})
+    return deleted > 0
+
+
 def list_orders() -> list[dict]:
     """订单列表（含商品名）"""
     sql = """

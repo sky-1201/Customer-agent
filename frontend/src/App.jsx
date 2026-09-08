@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import Approval from './pages/Approval'
+import Admin from './pages/Admin'
 import Chat from './pages/Chat'
 import Orders from './pages/Orders'
 import Shop from './pages/Shop'
@@ -8,7 +8,7 @@ const PAGES = [
   { key: 'shop', label: '商品', component: Shop },
   { key: 'orders', label: '我的订单', component: Orders },
   { key: 'chat', label: '智能客服', component: Chat },
-  { key: 'approval', label: '管理端', component: Approval },
+  { key: 'admin', label: '管理端', component: Admin },
 ]
 
 export default function App() {

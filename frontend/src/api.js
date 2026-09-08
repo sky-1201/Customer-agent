@@ -24,6 +24,65 @@ export async function fetchOrderDetail(id) {
   return res.json()
 }
 
+export async function deleteOrder(id) {
+  const res = await fetch(`/api/orders/${id}`, { method: 'DELETE' })
+  return res.json()
+}
+
+// ========== 知识库管理 ==========
+
+export async function fetchFaqs() {
+  const res = await fetch('/api/kb/faqs')
+  return res.json()
+}
+
+export async function createFaq(question, answer) {
+  const res = await fetch('/api/kb/faqs', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ question, answer }),
+  })
+  return res.json()
+}
+
+export async function deleteFaq(id) {
+  const res = await fetch(`/api/kb/faqs/${id}`, { method: 'DELETE' })
+  return res.json()
+}
+
+export async function fetchTroubleshooting() {
+  const res = await fetch('/api/kb/troubleshooting')
+  return res.json()
+}
+
+export async function createTroubleshooting(data) {
+  const res = await fetch('/api/kb/troubleshooting', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  })
+  return res.json()
+}
+
+export async function deleteTroubleshooting(id) {
+  const res = await fetch(`/api/kb/troubleshooting/${id}`, { method: 'DELETE' })
+  return res.json()
+}
+
+export async function fetchPolicies() {
+  const res = await fetch('/api/kb/policies')
+  return res.json()
+}
+
+export async function updatePolicy(id, fields) {
+  const res = await fetch(`/api/kb/policies/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(fields),
+  })
+  return res.json()
+}
+
 export async function fetchApprovalStatus(threadId) {
   const res = await fetch(`/api/approvals/status?thread_id=${threadId}`)
   return res.json()

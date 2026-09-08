@@ -14,7 +14,7 @@ React + FastAPI + LangGraph + PostgreSQL(pgvector)
 
 ## 环境搭建（换电脑从零恢复）
 
-> 前置：已安装 Docker、Anaconda（或 Miniconda）
+> 前置：已安装 Docker、Anaconda（或 Miniconda）、Node.js（前端）
 
 ### 1. 起服务（PostgreSQL + pgvector）
 
@@ -37,18 +37,35 @@ cp .env.example .env
 # 然后编辑 .env，填入自己的 LLM / Embedding API key
 ```
 
-### 4. 初始化数据
+### 4. 初始化数据（SQL 种子 + FAQ/故障向量化入库）
 
 ```bash
-# schema 已自动建表，只需插入数据（用 psql 或后续的 seed 脚本）
-psql postgresql://postgres:postgres@localhost:5432/customer_agent \
-  -f data/products.sql -f data/policies.sql -f data/orders.sql -f data/repairs.sql
+cd backend
+python -m app.db.seed
 ```
 
-### 5. 启动
+### 5. 启动后端
 
 ```bash
-uvicorn backend.app.main:app --reload
+# 在 backend 目录下
+uvicorn app.main:app --reload
+```
+
+### 6. 启动前端
+
+```bash
+# 另开终端
+cd frontend
+npm install
+npm run dev
+# 浏览器访问 http://localhost:5173
+```
+
+### 7.（可选）跑分流评测
+
+```bash
+cd backend
+python -m app.eval
 ```
 
 ## 项目结构

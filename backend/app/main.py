@@ -19,7 +19,13 @@
 5. 启动后端（开发模式，--reload 自动重载代码改动）
    uvicorn app.main:app --reload
 
-启动后浏览器访问 http://localhost:8000 打开前端对话页。
+6. 启动前端（另开终端，开发模式）
+   cd frontend
+   npm install          # 仅首次
+   npm run dev
+   # 浏览器访问 http://localhost:5173（Vite 代理 /api 到后端 8000）
+
+（可选）跑分流评测：cd backend && python -m app.eval
 测试接口：curl -X POST http://localhost:8000/api/chat -H "Content-Type: application/json" -d '{"message":"怎么激活系统"}'
 """
 from contextlib import asynccontextmanager
@@ -31,6 +37,7 @@ from fastapi.staticfiles import StaticFiles
 from app.api.approval import router as approval_router
 from app.api.catalog import router as catalog_router
 from app.api.chat import router as chat_router
+from app.api.kb import router as kb_router
 from app.config import ROOT_DIR
 from app.graph.main import checkpoint_pool
 from app.utils.logger import setup_logging
@@ -61,6 +68,7 @@ app.add_middleware(
 app.include_router(chat_router, prefix="/api")
 app.include_router(approval_router, prefix="/api")
 app.include_router(catalog_router, prefix="/api")
+app.include_router(kb_router, prefix="/api")
 
 
 @app.get("/health")

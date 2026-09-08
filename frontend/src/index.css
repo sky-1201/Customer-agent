@@ -42,3 +42,31 @@ body { font-family: -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif;
 }
 .input-row { display: flex; gap: 8px; }
 .input-row input { flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 15px; }
+
+/* 工具栏（筛选 + 搜索） */
+.toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; gap: 12px; flex-wrap: wrap; }
+.tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+.tab {
+  border: 1px solid #ddd; background: #fff; padding: 6px 14px;
+  border-radius: 16px; cursor: pointer; font-size: 14px; color: #555;
+}
+.tab.active { background: #1976d2; color: #fff; border-color: #1976d2; }
+.search { padding: 8px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; min-width: 200px; }
+
+/* 模态框 */
+.modal-mask {
+  position: fixed; inset: 0; background: rgba(0,0,0,.4);
+  display: flex; align-items: center; justify-content: center; z-index: 100;
+}
+.modal {
+  background: #fff; border-radius: 12px; padding: 24px;
+  max-width: 520px; width: 90%; max-height: 80vh; overflow-y: auto;
+  box-shadow: 0 8px 32px rgba(0,0,0,.2);
+}
+
+/* 统一状态提示 */
+.status-hint { text-align: center; color: #999; padding: 40px 0; font-size: 14px; }
+.status-hint.error { color: #e53935; }
+
+/* 知识库输入 */
+.kb-input { display: block; width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; margin-bottom: 8px; }
