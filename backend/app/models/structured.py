@@ -1,5 +1,5 @@
 """结构化输出模型（技术诊断 / 售后核实 / 最终决策）"""
-from typing import Literal
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -16,6 +16,8 @@ class TechResult(BaseModel):
 class AftersaleResult(BaseModel):
     """售后核实结果（售后核实节点输出）"""
 
+    order_no: Optional[str] = Field(default=None, description="订单号（节点从数据库精确覆盖）")
+    purchase_date: Optional[str] = Field(default=None, description="购买时间（节点从数据库精确覆盖）")
     order_valid: bool = Field(description="订单是否有效存在")
     in_warranty: bool = Field(description="是否在三包期内")
     repair_count: int = Field(description="维修次数")

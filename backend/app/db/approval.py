@@ -44,13 +44,8 @@ def create_approval(state: dict, decision) -> int:
 
 
 def list_approvals() -> list[dict]:
-    """待审批列表（管理端展示）"""
-    sql = """
-        SELECT id, user_request, decision, confidence, status
-        FROM approvals
-        WHERE status = 'pending'
-        ORDER BY id DESC
-    """
+    """待审批列表（返回全字段，供审批详情展示判断依据）"""
+    sql = "SELECT * FROM approvals WHERE status = 'pending' ORDER BY id DESC"
     with engine.raw_connection() as conn:
         with conn.cursor(row_factory=dict_row) as cur:
             cur.execute(sql)

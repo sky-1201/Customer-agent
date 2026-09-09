@@ -5,8 +5,8 @@ from app.utils.logger import get_logger
 logger = get_logger("query_order")
 
 
-def query_order(order_no: str) -> str:
-    """查询订单及其维修记录，返回格式化的文本供 Agent 判断。"""
+def query_order(order_no: str) -> dict | None:
+    """查询订单及其维修记录，返回结构化 dict（订单号、购买时间、维修记录等）"""
     sql_order = """
         SELECT o.order_no, p.name, o.amount, o.created_at, o.status
         FROM orders o JOIN products p ON o.product_id = p.id
@@ -23,24 +23,42 @@ def query_order(order_no: str) -> str:
             with conn.cursor() as cur:
                 cur.execute(sql_order, (order_no,))
                 order = cur.fetchone()
+                if order is None:
+                    logger.warning("订单不存在", extra={"order_no": order_no})
+                    return None
                 cur.execute(sql_repairs, (order_no,))
                 repairs = cur.fetchall()
 
-        if not order:
-            logger.warning("订单不存在", extra={"order_no": order_no})
-            return f"订单 {order_no} 不存在"
-
-        lines = [f"订单号：{order[0]}", f"商品：{order[1]}", f"金额：{order[2]}",
-                 f"下单时间：{order[3]}", f"状态：{order[4]}"]
-        if repairs:
-            lines.append("维修记录：")
-            for r in repairs:
-                lines.append(f"  - {r[0]} {r[1]}（{r[2]}）")
-        else:
-            lines.append("维修记录：无")
-
         logger.info("订单查询", extra={"order_no": order_no, "repair_count": len(repairs)})
-        return "\n".join(lines)
+        return {
+            "order_no": order[0],
+            "product_name": order[1],
+            "amount": order[2],
+            "purchase_date": str(order[3]),  # 购买时间
+            "status": order[4],
+            "repairs": [
+                {"repair_date": str(r[0]), "fault": r[1], "status": r[2]}
+                for r in repairs
+            ],
+        }
     except Exception as e:
         logger.error("订单查询失败", extra={"error": type(e).__name__}, exc_info=True)
-        return f"[订单查询失败：{type(e).__name__}]"
+        return None
+
+
+def format_order(order: dict) -> str:
+    """格式化订单信息为文本（给 LLM 判断用）"""
+    lines = [
+        f"订单号：{order['order_no']}",
+        f"商品：{order['product_name']}",
+        f"金额：{order['amount']}",
+        f"下单时间：{order['purchase_date']}",
+        f"状态：{order['status']}",
+    ]
+    if order["repairs"]:
+        lines.append("维修记录：")
+        for r in order["repairs"]:
+            lines.append(f"  - {r['repair_date']} {r['fault']}（{r['status']}）")
+    else:
+        lines.append("维修记录：无")
+    return "\n".join(lines)

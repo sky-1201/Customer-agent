@@ -14,6 +14,8 @@ logger = get_logger("router")
 # 规则快筛关键词（第1层，零 LLM 调用）
 HIGH_RISK_KEYWORDS = ["投诉", "曝光", "12315", "消协", "差评", "退一赔三"]
 REFUND_KEYWORDS = ["退款", "退货", "换货", "换新", "赔偿"]
+# 纯问候语（简单打招呼，直接 simple，避免模糊问候被低置信度兜底成 complex）
+GREETINGS = {"你好", "您好", "在吗", "在不在", "hi", "hello", "哈喽", "嗨"}
 
 
 class IntentClassification(BaseModel):
@@ -40,6 +42,7 @@ ROUTER_PROMPT = """你是客服分流器，判断用户消息应该走哪条处�
 
 判断规则：
 - 重点判断最后一条用户消息的意图
+- 纯问候语（如"你好""在吗"）→ simple，且给出高置信度
 - 命中退款/退货/换货等诉求 → complex
 - 命中投诉/威胁情绪 → complaint
 - 仅政策咨询（不涉及退换货判断）→ simple
@@ -48,7 +51,11 @@ ROUTER_PROMPT = """你是客服分流器，判断用户消息应该走哪条处�
 
 
 def rule_triage(text: str) -> str | None:
-    """规则快筛：命中高险词/退款词直接分类，不调 LLM"""
+    """规则快筛：纯问候 → simple；高险词 → complaint；退款词 → complex"""
+    t = text.strip().lower()
+    # 纯问候 → simple（模糊问候 LLM 置信度低，避免被兜底成 complex 触发误审批）
+    if t in GREETINGS or (len(t) <= 5 and any(g in t for g in GREETINGS)):
+        return "simple"
     if any(k in text for k in HIGH_RISK_KEYWORDS):
         return "complaint"
     if any(k in text for k in REFUND_KEYWORDS):

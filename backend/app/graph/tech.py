@@ -4,7 +4,7 @@ from langchain_openai import ChatOpenAI
 
 from app.config import AGENT_MODEL, DASHSCOPE_API_KEY, DASHSCOPE_BASE_URL
 from app.graph.state import CustomerServiceState
-from app.kb.order import query_order
+from app.kb.order import format_order, query_order
 from app.kb.search import search_troubleshooting
 from app.models.structured import TechResult
 from app.utils.logger import get_logger
@@ -39,7 +39,8 @@ def tech_node(state: CustomerServiceState) -> dict:
 
     # 1. 查故障说明（语义检索）+ 维修记录（判断"是否同一故障"的关键依据）
     fault_info = search_troubleshooting(user_msg)
-    repair_info = query_order(DEMO_ORDER_NO)
+    order = query_order(DEMO_ORDER_NO)
+    repair_info = format_order(order) if order else "订单不存在"
 
     # 2. 结构化输出 TechResult
     try:
