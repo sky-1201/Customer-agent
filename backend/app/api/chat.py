@@ -7,10 +7,11 @@ SSE 事件协议（对应技术文档 7.4 节）：
 """
 import json
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
+from app.api.auth import get_current_user
 from app.graph.main import main_graph
 from app.utils.logger import get_logger, set_trace_id
 
@@ -24,6 +25,7 @@ NODE_AGENT_MAP = {
     "tech": ("tech", "正在查故障说明"),
     "aftersale": ("aftersale", "正在查政策+订单"),
     "decision": ("decision", "正在综合判断"),
+    "ask_order_no": ("clarify", "正在确认订单信息"),
 }
 
 
@@ -34,21 +36,30 @@ def sse(event: str, data: dict) -> str:
 
 class ChatRequest(BaseModel):
     message: str
-    thread_id: str = "demo"  # 会话 ID，多轮对话用同一个
+    session_id: str = "default"  # 会话 ID（不含身份标识，身份只从 token 来）
 
 
 @router.post("/chat")
-async def chat(req: ChatRequest):
+async def chat(req: ChatRequest, user_id: int = Depends(get_current_user)):
+    # thread_id 由服务端拼接：user_{user_id}_{session_id}
+    # 安全红线：用户身份只信 token，前端传任何 session_id 都碰不到别人的
+    # 会话、checkpoint 和审批单（也无法 resume 别人的图）
+    thread_id = f"user_{user_id}_{req.session_id}"
+
     # 用 thread_id 作为 trace_id，贯穿本次请求的所有日志
-    set_trace_id(req.thread_id)
+    set_trace_id(thread_id)
     logger.info(
         "收到对话请求",
-        extra={"thread_id": req.thread_id, "msg_len": len(req.message)},
+        extra={"thread_id": thread_id, "user_id": user_id, "msg_len": len(req.message)},
     )
 
     async def event_stream():
-        config = {"configurable": {"thread_id": req.thread_id}}
-        input_state = {"messages": [("user", req.message)], "thread_id": req.thread_id}
+        config = {"configurable": {"thread_id": thread_id}}
+        input_state = {
+            "messages": [("user", req.message)],
+            "thread_id": thread_id,
+            "user_id": user_id,
+        }
 
         # 1. 流式执行图，每个节点完成时推送 Agent 工作状态
         async for chunk in main_graph.astream(input_state, config):
@@ -62,13 +73,13 @@ async def chat(req: ChatRequest):
         if snapshot.next:
             # 图暂停（interrupt 等审批），返回等待提示
             final = "您的申请已提交，正在等待人工审核，请稍候..."
-            logger.info("对话中断（等待审批）", extra={"thread_id": req.thread_id})
+            logger.info("对话中断（等待审批）", extra={"thread_id": thread_id})
         else:
             messages = snapshot.values.get("messages") or []
             final = messages[-1].content if messages else "抱歉，处理失败。"
             logger.info(
                 "对话完成",
-                extra={"thread_id": req.thread_id, "reply_len": len(final or "")},
+                extra={"thread_id": thread_id, "reply_len": len(final or "")},
             )
 
         yield sse("message", {"content": final})

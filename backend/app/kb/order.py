@@ -5,13 +5,22 @@ from app.utils.logger import get_logger
 logger = get_logger("query_order")
 
 
-def query_order(order_no: str) -> dict | None:
-    """查询订单及其维修记录，返回结构化 dict（订单号、购买时间、维修记录等）"""
+def query_order(order_no: str, user_id: int | None = None) -> dict | None:
+    """查询订单及其维修记录，返回结构化 dict（订单号、购买时间、维修记录等）
+
+    安全红线：传了 user_id 就只查该用户的订单（Agent 工具必须传），
+    否则 user_b 能从 Agent 嘴里套出 user_a 的订单信息（提示注入越权）。
+    查不到返回 None（不区分"不存在"与"不属于你"）。
+    """
     sql_order = """
         SELECT o.order_no, p.name, o.amount, o.created_at, o.status
         FROM orders o JOIN products p ON o.product_id = p.id
         WHERE o.order_no = %s
     """
+    params: list = [order_no]
+    if user_id is not None:
+        sql_order += " AND o.user_id = %s"
+        params.append(user_id)
     sql_repairs = """
         SELECT r.repair_date, r.fault, r.status
         FROM repairs r JOIN orders o ON r.order_id = o.id
@@ -21,15 +30,21 @@ def query_order(order_no: str) -> dict | None:
     try:
         with engine.raw_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute(sql_order, (order_no,))
+                cur.execute(sql_order, params)
                 order = cur.fetchone()
                 if order is None:
-                    logger.warning("订单不存在", extra={"order_no": order_no})
+                    logger.warning(
+                        "订单不存在或不属于当前用户",
+                        extra={"order_no": order_no, "user_id": user_id},
+                    )
                     return None
                 cur.execute(sql_repairs, (order_no,))
                 repairs = cur.fetchall()
 
-        logger.info("订单查询", extra={"order_no": order_no, "repair_count": len(repairs)})
+        logger.info(
+            "订单查询",
+            extra={"order_no": order_no, "user_id": user_id, "repair_count": len(repairs)},
+        )
         return {
             "order_no": order[0],
             "product_name": order[1],

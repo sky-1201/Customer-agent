@@ -70,3 +70,20 @@ body { font-family: -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif;
 
 /* 知识库输入 */
 .kb-input { display: block; width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; margin-bottom: 8px; }
+
+/* 导航栏用户信息（迭代1） */
+.nav-user { margin-left: auto; font-size: 13px; color: #888; }
+
+/* 登录页（迭代1） */
+.login-page { display: flex; align-items: center; justify-content: center; min-height: 90vh; }
+.login-card {
+  background: #fff; border-radius: 12px; padding: 32px; width: 360px;
+  box-shadow: 0 4px 16px rgba(0,0,0,.1);
+}
+.login-input {
+  display: block; width: 100%; padding: 10px; margin-bottom: 12px;
+  border: 1px solid #ddd; border-radius: 6px; font-size: 15px;
+}
+.login-btn { width: 100%; padding: 10px; margin-top: 4px; }
+.login-error { color: #e53935; font-size: 13px; margin-bottom: 10px; text-align: center; }
+.login-demo { font-size: 12px; color: #999; margin-top: 16px; line-height: 1.8; text-align: center; }

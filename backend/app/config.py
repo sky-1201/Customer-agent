@@ -26,3 +26,7 @@ DATABASE_URL = os.getenv(
     "DATABASE_URL",
     "postgresql+psycopg://postgres:postgres@localhost:5432/customer_agent",
 )
+
+# --- JWT 认证（迭代1：多用户隔离）---
+JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "dev-only-secret-change-in-production")
+JWT_EXPIRE_HOURS = int(os.getenv("JWT_EXPIRE_HOURS", "72"))

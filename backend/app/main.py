@@ -35,6 +35,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app.api.approval import router as approval_router
+from app.api.auth import router as auth_router
 from app.api.catalog import router as catalog_router
 from app.api.chat import router as chat_router
 from app.api.kb import router as kb_router
@@ -65,6 +66,7 @@ app.add_middleware(
 )
 
 # API 路由
+app.include_router(auth_router, prefix="/api")
 app.include_router(chat_router, prefix="/api")
 app.include_router(approval_router, prefix="/api")
 app.include_router(catalog_router, prefix="/api")

@@ -10,8 +10,9 @@ logger = get_logger("approval_db")
 
 
 def create_approval(state: dict, decision) -> int:
-    """写审批单，返回 approval_id"""
+    """写审批单，返回 approval_id（user_id 从 state 注入，标识诉求归属用户）"""
     thread_id = state.get("thread_id", "")
+    user_id = state.get("user_id")
     user_request = state["messages"][-1].content
     tech = state.get("tech_result")
     aftersale = state.get("aftersale_result")
@@ -21,9 +22,9 @@ def create_approval(state: dict, decision) -> int:
 
     sql = """
         INSERT INTO approvals
-            (thread_id, user_request, tech_result, aftersale_result,
+            (thread_id, user_id, user_request, tech_result, aftersale_result,
              decision, policy_ref, comfort_msg, confidence, status)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'pending')
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'pending')
         RETURNING id
     """
     with engine.raw_connection() as conn:
@@ -31,7 +32,7 @@ def create_approval(state: dict, decision) -> int:
             cur.execute(
                 sql,
                 (
-                    thread_id, user_request, tech_json, aftersale_json,
+                    thread_id, user_id, user_request, tech_json, aftersale_json,
                     decision.conclusion, decision.policy_ref,
                     decision.comfort_msg, decision.confidence,
                 ),

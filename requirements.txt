@@ -29,4 +29,9 @@ sqlalchemy>=2.0
 pydantic>=2.6
 
 # --- 配置 ---
-python-dotenv>=1.0              # 读 .env 环境变量
+python-dotenv>=1.0             # 读 .env 环境变量
+
+# --- 认证与安全（迭代1：多用户隔离）---
+passlib[bcrypt]>=1.7.4         # 密码哈希（绝不存明文）
+bcrypt<4.1                     # passlib 1.7.4 与 bcrypt>=4.1 不兼容（__about__ 被移除），锁旧版
+pyjwt>=2.8                     # JWT 签发/校验

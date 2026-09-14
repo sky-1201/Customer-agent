@@ -1,7 +1,7 @@
 -- ============================================================
 -- 智能笔记本售后客服系统 · 数据库建表脚本
 -- 技术栈：PostgreSQL + pgvector
--- 对应《技术设计文档》第 8 节
+-- 对应《技术设计文档》第 8 节 + 《迭代01》迭代1（多用户隔离）
 -- ============================================================
 
 -- 1. 启用 pgvector 扩展（向量检索）
@@ -22,17 +22,26 @@ CREATE TABLE IF NOT EXISTS products (
     price       DECIMAL(10,2)               -- 参考价（元）
 );
 
--- 3. 订单表（单一用户演示，故无 user_id）
+-- 3. 用户表（迭代1：多用户隔离的地基）
+CREATE TABLE IF NOT EXISTS users (
+    id            SERIAL PRIMARY KEY,
+    username      VARCHAR(50) UNIQUE NOT NULL,
+    password_hash VARCHAR(200) NOT NULL,    -- bcrypt 哈希，绝不存明文
+    created_at    TIMESTAMP DEFAULT now()
+);
+
+-- 4. 订单表（user_id 归属用户，查询必须按 user_id 过滤——安全红线）
 CREATE TABLE IF NOT EXISTS orders (
     id          SERIAL PRIMARY KEY,
     order_no    VARCHAR(50) UNIQUE NOT NULL,
     product_id  INT REFERENCES products(id),
+    user_id     INT REFERENCES users(id),   -- 订单归属（迭代1 新增，暂允许 NULL，迭代内收敛）
     amount      DECIMAL(10,2),
     created_at  TIMESTAMP DEFAULT now(),
     status      VARCHAR(20) DEFAULT '已完成'  -- 已完成 / 退换货中 / 已退换
 );
 
--- 4. 维修记录表（构造数据，支撑"修两次换货"核心场景）
+-- 5. 维修记录表（构造数据，支撑"修两次换货"核心场景）
 CREATE TABLE IF NOT EXISTS repairs (
     id          SERIAL PRIMARY KEY,
     order_id    INT REFERENCES orders(id),
@@ -41,7 +50,7 @@ CREATE TABLE IF NOT EXISTS repairs (
     status      VARCHAR(20)
 );
 
--- 5. 政策表（字段化，精确查询，禁止用向量检索）
+-- 6. 政策表（字段化，精确查询，禁止用向量检索）
 CREATE TABLE IF NOT EXISTS policies (
     id                  SERIAL PRIMARY KEY,
     category            VARCHAR(50),         -- 品类：微型计算机
@@ -53,7 +62,7 @@ CREATE TABLE IF NOT EXISTS policies (
     source              VARCHAR(200)         -- 政策出处
 );
 
--- 6. FAQ 表（文本 + 向量双存，RAG 召回）
+-- 7. FAQ 表（文本 + 向量双存，RAG 召回）
 CREATE TABLE IF NOT EXISTS faqs (
     id                  SERIAL PRIMARY KEY,
     question            TEXT NOT NULL,
@@ -62,7 +71,7 @@ CREATE TABLE IF NOT EXISTS faqs (
     question_embedding  vector(1024)
 );
 
--- 7. 故障说明表（文本 + 向量双存，RAG 召回）
+-- 8. 故障说明表（文本 + 向量双存，RAG 召回）
 CREATE TABLE IF NOT EXISTS troubleshooting (
     id               SERIAL PRIMARY KEY,
     product_model    VARCHAR(100),           -- 关联型号（NULL = 通用故障）
@@ -72,10 +81,11 @@ CREATE TABLE IF NOT EXISTS troubleshooting (
     fault_embedding  vector(1024)
 );
 
--- 8. 审批单表（HITL 数据枢纽，管理端"待审批详情页"读这张表）
+-- 9. 审批单表（HITL 数据枢纽，管理端"待审批详情页"读这张表）
 CREATE TABLE IF NOT EXISTS approvals (
     id               SERIAL PRIMARY KEY,
     thread_id        VARCHAR(100),           -- 关联对话会话（resume 用）
+    user_id          INT REFERENCES users(id),  -- 诉求归属用户（迭代1 新增）
     user_request     TEXT,                   -- 用户诉求
     tech_result      JSONB,                  -- 技术诊断结果（TechResult）
     aftersale_result JSONB,                  -- 售后核实结果（AftersaleResult）

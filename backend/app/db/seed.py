@@ -4,12 +4,35 @@
     python -m app.db.seed
 """
 import json
+import sys
+
+# Windows 中文控制台默认 GBK 编码，打印 ✅ 等字符会崩溃，强制 UTF-8 输出
+if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
+    sys.stdout.reconfigure(encoding="utf-8")
 
 from app.config import ROOT_DIR
 from app.db.database import engine
 from app.kb.embedding import embed
+from app.utils.security import pwd_context
 
 DATA_DIR = ROOT_DIR / "data"
+
+# 内置演示用户（密码均为 123456，仅用于开发/验收多用户隔离）
+DEMO_USERS = [
+    ("user_a", "123456"),  # O-001/002/003 订单归属此用户
+    ("user_b", "123456"),  # 无订单，用于对照"看不到别人的数据"
+]
+
+
+def seed_users():
+    """内置演示用户（迭代1：多用户隔离，orders.sql 按 username 关联归属）"""
+    sql = "INSERT INTO users (username, password_hash) VALUES (%s, %s)"
+    with engine.raw_connection() as conn:
+        with conn.cursor() as cur:
+            for username, password in DEMO_USERS:
+                cur.execute(sql, (username, pwd_context.hash(password)))
+        conn.commit()
+    print(f"✅ 用户入库 {len(DEMO_USERS)} 个（{', '.join(u for u, _ in DEMO_USERS)}，密码均为 123456）")
 
 
 def run_sql_file(filename: str):
@@ -72,6 +95,7 @@ def seed_vectors():
 
 def main():
     print("开始初始化数据...")
+    seed_users()  # 用户在 orders.sql 之前入库（订单按 username 关联 user_id）
     seed_structured()
     seed_vectors()
     print("✅ 数据初始化完成")

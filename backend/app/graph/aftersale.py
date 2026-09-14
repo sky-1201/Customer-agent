@@ -6,6 +6,7 @@ from langchain_openai import ChatOpenAI
 
 from app.config import AGENT_MODEL, DASHSCOPE_API_KEY, DASHSCOPE_BASE_URL
 from app.graph.state import CustomerServiceState
+from app.graph.utils import recent_user_texts
 from app.kb.order import format_order, query_order
 from app.kb.policy import query_full_policy
 from app.models.structured import AftersaleResult
@@ -32,25 +33,23 @@ AFTERSALE_PROMPT = """你是售后政策核实专家。根据政策条款、订�
 注意：不要编造订单信息和政策条款，只根据提供的内容判断。
 """
 
-# 演示场景：核心订单 O-001（小新 Pro 16，修两次换货）
-# TODO: 后续支持多订单时，改为从 state 动态获取订单号
-DEMO_ORDER_NO = "O-001"
-
 
 def aftersale_node(state: CustomerServiceState) -> dict:
     """售后核实：查完整政策 + 查订单 → 结构化输出 AftersaleResult"""
-    user_msg = state["messages"][-1].content
+    # 最近几条用户消息拼成完整诉求（同 tech 节点，澄清场景最后一条是订单号回答）
+    user_msg = recent_user_texts(state)
+    order_no = state.get("order_no")  # router 已锁定（迭代3，不再有硬编码订单）
 
-    # 1. 查完整政策 + 订单信息（结构化）
+    # 1. 查完整政策 + 订单信息（结构化；订单带 user_id 隔离，查不到视为不存在）
     full_policy = query_full_policy()
-    order = query_order(DEMO_ORDER_NO)
+    order = query_order(order_no, state.get("user_id")) if order_no else None
 
     if order is None:
         result = AftersaleResult(
             order_valid=False, in_warranty=False, repair_count=0,
             policy_applicable=False, policy_ref="订单不存在", confidence=0.0,
         )
-        logger.warning("售后核实：订单不存在", extra={"order_no": DEMO_ORDER_NO})
+        logger.warning("售后核实：订单不存在或不属于当前用户", extra={"order_no": order_no})
         return {"aftersale_result": result}
 
     # 2. LLM 结构化输出（判断 in_warranty / repair_count / policy_applicable）

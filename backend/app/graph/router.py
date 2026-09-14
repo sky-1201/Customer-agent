@@ -1,4 +1,8 @@
-"""分流器：规则快筛 + 小模型分类 + 置信度兜底（对应技术文档第3节）"""
+"""分流器：规则快筛 + 小模型分类 + 置信度兜底（对应技术文档第3节）
+
+迭代3 新增：槽位澄清处理（pending_clarify）——用户没给订单号时 Agent 主动追问，
+用户回复后优先按"澄清回答"处理，不重新分类（见《迭代01》5.4 节，方案B 自然多轮）。
+"""
 from typing import Literal
 
 from langchain_core.messages import SystemMessage
@@ -7,6 +11,7 @@ from pydantic import BaseModel, Field
 
 from app.config import DASHSCOPE_API_KEY, DASHSCOPE_BASE_URL, ROUTER_MODEL
 from app.graph.state import CustomerServiceState
+from app.graph.utils import extract_order_no, extract_order_no_from_history
 from app.utils.logger import get_logger
 
 logger = get_logger("router")
@@ -16,6 +21,9 @@ HIGH_RISK_KEYWORDS = ["投诉", "曝光", "12315", "消协", "差评", "退一�
 REFUND_KEYWORDS = ["退款", "退货", "换货", "换新", "赔偿"]
 # 纯问候语（简单打招呼，直接 simple，避免模糊问候被低置信度兜底成 complex）
 GREETINGS = {"你好", "您好", "在吗", "在不在", "hi", "hello", "哈喽", "嗨"}
+
+# 澄清上限：最多追问 2 次，超限降级转人工（防死循环，澄清防线①）
+MAX_CLARIFY = 2
 
 
 class IntentClassification(BaseModel):
@@ -63,9 +71,60 @@ def rule_triage(text: str) -> str | None:
     return None
 
 
-def router_node(state: CustomerServiceState) -> dict:
-    """分流节点：三层分流（规则 → LLM 分类 → 置信度兜底）"""
+def handle_order_no_clarify(state: CustomerServiceState) -> dict:
+    """澄清上下文：上一轮在等用户补充订单号，本条消息按澄清回答处理（不重新分类）"""
     last_user = state["messages"][-1].content
+
+    # 高风险词优先：用户在澄清过程中表达投诉 → 立即放弃澄清转人工
+    # （投诉 100% 召回是红线，不能被澄清流程吞掉）
+    if any(k in last_user for k in HIGH_RISK_KEYWORDS):
+        logger.info("澄清中命中高风险词，放弃澄清转人工", extra={"query": last_user[:30]})
+        return {
+            "intent": "complaint",
+            "intent_confidence": 1.0,
+            "risk_signals": ["complaint_during_clarify"],
+            "pending_clarify": None,
+            "clarify_count": 0,
+        }
+
+    order_no = extract_order_no(last_user)
+    if order_no:
+        logger.info("澄清成功：拿到订单号", extra={"order_no": order_no})
+        return {
+            "intent": "complex",
+            "intent_confidence": 1.0,
+            "risk_signals": ["clarified"],
+            "order_no": order_no,
+            "pending_clarify": None,
+            "clarify_count": 0,
+        }
+
+    # 没识别到订单号 → 追问次数 +1，超限降级转人工（澄清防线①上限 + 降级链）
+    count = (state.get("clarify_count") or 0) + 1
+    if count >= MAX_CLARIFY:
+        logger.warning(
+            "澄清次数超限，降级转人工",
+            extra={"clarify_count": count, "query": last_user[:30]},
+        )
+        return {
+            "intent": "complaint",
+            "intent_confidence": 0.0,
+            "risk_signals": ["clarify_overflow"],
+            "pending_clarify": None,
+            "clarify_count": 0,
+        }
+
+    logger.info("未识别到订单号，继续追问", extra={"clarify_count": count, "query": last_user[:30]})
+    return {"intent": "ask_order_no", "clarify_count": count}
+
+
+def router_node(state: CustomerServiceState) -> dict:
+    """分流节点：澄清上下文优先 → 三层分流（规则 → LLM 分类 → 置信度兜底）"""
+    last_user = state["messages"][-1].content
+
+    # 第0层：有未完成的澄清 → 本条消息按澄清回答处理（迭代3）
+    if state.get("pending_clarify") == "order_no":
+        return handle_order_no_clarify(state)
 
     # 第1层：规则快筛
     rule_result = rule_triage(last_user)
@@ -74,42 +133,49 @@ def router_node(state: CustomerServiceState) -> dict:
             "分流结果",
             extra={"intent": rule_result, "source": "rule", "query": last_user[:30]},
         )
-        return {
-            "intent": rule_result,
-            "intent_confidence": 1.0,
-            "risk_signals": [rule_result],
-        }
-
-    # 第2层：LLM 分类（小模型 + 结构化输出）
-    try:
-        result = router_llm.invoke(
-            [SystemMessage(content=ROUTER_PROMPT), ("user", last_user)]
-        )
-    except Exception as e:
-        # 分类失败 → 兜底走复杂流程（稳妥，宁可错杀不可放过）
-        logger.warning("分流失败，兜底走 complex", extra={"error": type(e).__name__})
-        return {"intent": "complex", "intent_confidence": 0.0, "risk_signals": []}
-
-    # 第3层：置信度兜底
-    if result.intent == "complaint":
-        intent = "complaint"
-    elif result.confidence < 0.7:
-        intent = "complex"  # 低置信 → 复杂流程
+        intent, confidence, signals = rule_result, 1.0, [rule_result]
     else:
-        intent = result.intent
+        # 第2层：LLM 分类（小模型 + 结构化输出）
+        try:
+            result = router_llm.invoke(
+                [SystemMessage(content=ROUTER_PROMPT), ("user", last_user)]
+            )
+        except Exception as e:
+            # 分类失败 → 兜底走复杂流程（稳妥，宁可错杀不可放过）
+            logger.warning("分流失败，兜底走 complex", extra={"error": type(e).__name__})
+            intent, confidence, signals = "complex", 0.0, []
+        else:
+            # 第3层：置信度兜底
+            if result.intent == "complaint":
+                intent = "complaint"
+            elif result.confidence < 0.7:
+                intent = "complex"  # 低置信 → 复杂流程
+            else:
+                intent = result.intent
+            confidence, signals = result.confidence, result.risk_signals
+            logger.info(
+                "分流结果",
+                extra={
+                    "intent": intent,
+                    "confidence": confidence,
+                    "source": "llm",
+                    "signals": signals,
+                    "query": last_user[:30],
+                },
+            )
 
-    logger.info(
-        "分流结果",
-        extra={
-            "intent": intent,
-            "confidence": result.confidence,
-            "source": "llm",
-            "signals": result.risk_signals,
-            "query": last_user[:30],
-        },
-    )
-    return {
-        "intent": intent,
-        "intent_confidence": result.confidence,
-        "risk_signals": result.risk_signals,
-    }
+    updates = {"intent": intent, "intent_confidence": confidence, "risk_signals": signals}
+
+    # 复杂售后：锁定订单号（优先级：最后一条消息 > 历史消息 > state 已有）。
+    # 用户可能上几轮就报过订单号，也可能这轮换了个新订单号（覆盖旧的）。
+    if intent == "complex":
+        candidate = (
+            extract_order_no(last_user)
+            or extract_order_no_from_history(state["messages"][:-1])
+            or state.get("order_no")
+        )
+        if candidate and candidate != state.get("order_no"):
+            logger.info("锁定订单号", extra={"order_no": candidate})
+            updates["order_no"] = candidate
+
+    return updates

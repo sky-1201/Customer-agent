@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { chat, fetchApprovalStatus } from '../api'
+import { chat, fetchApprovalStatus, getUsername } from '../api'
 
 // Agent 名称展示（前端展示层，对应 PRD 客服页设计点①）
 const AGENT_NAMES = {
@@ -11,14 +11,16 @@ const AGENT_NAMES = {
   pending_approval: '等待人工审批',
 }
 
-const MSG_KEY = 'chat_messages'
-const THREAD_KEY = 'chat_thread_id'
+// localStorage 缓存按用户名隔离（迭代1）：
+// 同一浏览器先后登录 A/B 时，B 不会看到 A 缓存的聊天记录
+function msgKey() { return `chat_messages_${getUsername()}` }
+function sessionKey() { return `chat_session_id_${getUsername()}` }
 
-function getOrCreateThreadId() {
-  let id = localStorage.getItem(THREAD_KEY)
+function getOrCreateSessionId() {
+  let id = localStorage.getItem(sessionKey())
   if (!id) {
-    id = 'thread-' + Date.now()
-    localStorage.setItem(THREAD_KEY, id)
+    id = 'session-' + Date.now()
+    localStorage.setItem(sessionKey(), id)
   }
   return id
 }
@@ -27,19 +29,19 @@ export default function Chat() {
   // 历史消息从 localStorage 恢复（刷新/换页面不丢）
   const [messages, setMessages] = useState(() => {
     try {
-      return JSON.parse(localStorage.getItem(MSG_KEY)) || []
+      return JSON.parse(localStorage.getItem(msgKey())) || []
     } catch {
       return []
     }
   })
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
-  const [threadId, setThreadId] = useState(getOrCreateThreadId)
+  const [sessionId, setSessionId] = useState(getOrCreateSessionId)
   const pollTimer = useRef(null)
 
   // 消息变化时持久化
   useEffect(() => {
-    localStorage.setItem(MSG_KEY, JSON.stringify(messages))
+    localStorage.setItem(msgKey(), JSON.stringify(messages))
   }, [messages])
 
   // 组件卸载时清理轮询定时器
@@ -63,7 +65,7 @@ export default function Chat() {
     if (pollTimer.current) return
     pollTimer.current = setInterval(async () => {
       try {
-        const result = await fetchApprovalStatus(threadId)
+        const result = await fetchApprovalStatus(sessionId)
         if (result.status === 'approved' || result.status === 'rejected') {
           clearInterval(pollTimer.current)
           pollTimer.current = null
@@ -87,9 +89,9 @@ export default function Chat() {
       pollTimer.current = null
     }
     setMessages([])
-    localStorage.removeItem(MSG_KEY)
-    localStorage.removeItem(THREAD_KEY)
-    setThreadId(getOrCreateThreadId()) // 开新会话
+    localStorage.removeItem(msgKey())
+    localStorage.removeItem(sessionKey())
+    setSessionId(getOrCreateSessionId()) // 开新会话
   }
 
   async function send() {
@@ -100,7 +102,7 @@ export default function Chat() {
     setSending(true)
 
     try {
-      await chat(msg, threadId, (event) => {
+      await chat(msg, sessionId, (event) => {
         // event.agent → Agent 工作状态；event.content → 助手回复
         if (event.agent) {
           setMessages((m) => [

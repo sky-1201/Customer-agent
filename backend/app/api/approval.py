@@ -1,8 +1,13 @@
-"""管理端审批接口（待审批列表 + 提交审批触发 resume）"""
-from fastapi import APIRouter
+"""管理端审批接口（待审批列表 + 提交审批触发 resume）
+
+鉴权说明（迭代1 决策）：管理端接口（列表/提交）暂不设防，由演示者本地使用，
+迭代5 安全加固时补坐席鉴权。C 端轮询接口（/approvals/status）必须登录 + 校验归属。
+"""
+from fastapi import APIRouter, Depends, HTTPException
 from langgraph.types import Command
 from pydantic import BaseModel
 
+from app.api.auth import get_current_user
 from app.db.approval import get_approval, get_approval_by_thread, list_approvals, update_approval
 from app.graph.main import main_graph
 from app.utils.logger import get_logger
@@ -18,13 +23,19 @@ class ApprovalRequest(BaseModel):
 
 @router.get("/approvals")
 def get_approvals():
-    """待审批列表"""
+    """待审批列表（管理端）"""
     return list_approvals()
 
 
 @router.get("/approvals/status")
-async def approval_status(thread_id: str):
-    """客户端轮询审批结果（收到"等待审核"后定时查询）"""
+async def approval_status(session_id: str, user_id: int = Depends(get_current_user)):
+    """客户端轮询审批结果（收到"等待审核"后定时查询）
+
+    安全红线：thread_id 永远由服务端用 token 里的 user_id 拼接，
+    前端只传 session_id——物理上无法伪造别人的 thread_id 来轮询审批结果。
+    """
+    thread_id = f"user_{user_id}_{session_id}"
+
     approval = get_approval_by_thread(thread_id)
     if approval is None:
         return {"status": "none"}  # 尚未触发审批

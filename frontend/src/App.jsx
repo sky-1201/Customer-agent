@@ -1,6 +1,8 @@
 import { useState } from 'react'
+import { clearAuth, getToken, getUsername } from './api'
 import Admin from './pages/Admin'
 import Chat from './pages/Chat'
+import Login from './pages/Login'
 import Orders from './pages/Orders'
 import Shop from './pages/Shop'
 
@@ -13,6 +15,19 @@ const PAGES = [
 
 export default function App() {
   const [page, setPage] = useState('shop')
+  // 登录态：无 token 时只渲染登录页（路由守卫）
+  const [authed, setAuthed] = useState(!!getToken())
+
+  if (!authed) {
+    return <Login onLogin={() => setAuthed(true)} />
+  }
+
+  function logout() {
+    clearAuth()
+    setAuthed(false)
+    setPage('shop')
+  }
+
   const Current = PAGES.find((p) => p.key === page).component
 
   return (
@@ -28,6 +43,8 @@ export default function App() {
             {p.label}
           </button>
         ))}
+        <span className="nav-user">{getUsername()}</span>
+        <button className="nav-btn" onClick={logout}>退出</button>
       </nav>
       <main className="main">
         <Current />
