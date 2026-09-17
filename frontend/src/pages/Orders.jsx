@@ -75,6 +75,17 @@ export default function Orders() {
               ) : (
                 <div style={{ paddingLeft: 12 }}>无</div>
               )}
+              {/* 状态流转记录（迭代5：订单状态机，可追溯） */}
+              {detail.events && detail.events.length > 0 && (
+                <>
+                  <div style={{ marginTop: 8 }}>状态流转：</div>
+                  {detail.events.map((e, i) => (
+                    <div key={i} style={{ paddingLeft: 12 }}>
+                      • {(e.from_status || '创建')} → {e.to_status}（{e.reason}）
+                    </div>
+                  ))}
+                </>
+              )}
             </div>
             <button className="btn" style={{ marginTop: 16 }} onClick={() => setDetail(null)}>
               关闭

@@ -93,7 +93,45 @@ CREATE TABLE IF NOT EXISTS approvals (
     policy_ref       TEXT,                   -- 政策依据（可溯源）
     comfort_msg      TEXT,                   -- 草拟回复
     confidence       FLOAT,                  -- 置信度
-    status           VARCHAR(20) DEFAULT 'pending'  -- pending/approved/rejected/edited
+    status           VARCHAR(20) DEFAULT 'pending',  -- pending/approved/rejected/edited
+    created_at       TIMESTAMP DEFAULT now(),
+    decided_at       TIMESTAMP               -- 审批完成时间（审批时长统计，迭代5）
+);
+
+-- 10. 接管单表（迭代4：转人工坐席接管）
+CREATE TABLE IF NOT EXISTS handovers (
+    id             SERIAL PRIMARY KEY,
+    thread_id      VARCHAR(100) NOT NULL,    -- 会话（= checkpoint 的 thread_id）
+    user_id        INT REFERENCES users(id),
+    reason         VARCHAR(30),              -- complaint 投诉 / user_request 用户主动 / clarify_overflow 澄清失败 / ai_escalate AI处理不了
+    user_request   TEXT,                     -- 诉求摘要（最近用户消息）
+    agent_context  JSONB,                    -- AI 已核实信息快照（tech/aftersale/decision，接管交接用）
+    status         VARCHAR(20) DEFAULT 'pending',  -- pending 待接管 / active 接管中 / closed 已结束 / returned 已转回AI
+    created_at     TIMESTAMP DEFAULT now(),
+    taken_at       TIMESTAMP,                -- 接管时间
+    closed_at      TIMESTAMP                 -- 结束/转回时间
+);
+
+-- 11. 会话表（迭代5：会话管理——历史会话列表/多会话/归档）
+CREATE TABLE IF NOT EXISTS sessions (
+    id          SERIAL PRIMARY KEY,
+    user_id     INT REFERENCES users(id) NOT NULL,
+    session_id  VARCHAR(100) NOT NULL,       -- 前端生成的会话标识（服务端拼 thread_id 用）
+    title       VARCHAR(100),                -- 摘要（首条用户消息截断）
+    created_at  TIMESTAMP DEFAULT now(),
+    updated_at  TIMESTAMP DEFAULT now(),
+    archived    BOOLEAN DEFAULT FALSE,
+    UNIQUE(user_id, session_id)
+);
+
+-- 12. 订单状态流转日志（迭代5：订单状态机，全程可追溯）
+CREATE TABLE IF NOT EXISTS order_events (
+    id          SERIAL PRIMARY KEY,
+    order_id    INT REFERENCES orders(id),
+    from_status VARCHAR(20),
+    to_status   VARCHAR(20),
+    reason      VARCHAR(200),
+    created_at  TIMESTAMP DEFAULT now()
 );
 
 -- ============================================================

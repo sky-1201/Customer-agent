@@ -114,8 +114,8 @@ export default function Approval() {
   )
 }
 
-// 区块标题
-function Section({ title, children }) {
+// 区块标题（导出给接管台复用）
+export function Section({ title, children }) {
   return (
     <div style={{ marginBottom: 14 }}>
       <div style={{ fontWeight: 'bold', fontSize: 14, marginBottom: 6, color: '#1976d2' }}>
@@ -126,8 +126,8 @@ function Section({ title, children }) {
   )
 }
 
-// 技术诊断明细
-function TechDetail({ data }) {
+// 技术诊断明细（导出给接管台复用）
+export function TechDetail({ data }) {
   if (!data) return <p style={{ color: '#999' }}>无技术诊断数据</p>
   return (
     <div>
@@ -139,8 +139,8 @@ function TechDetail({ data }) {
   )
 }
 
-// 售后核实明细
-function AftersaleDetail({ data }) {
+// 售后核实明细（导出给接管台复用）
+export function AftersaleDetail({ data }) {
   if (!data) return <p style={{ color: '#999' }}>无售后核实数据</p>
   return (
     <div>

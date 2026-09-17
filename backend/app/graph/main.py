@@ -14,17 +14,13 @@ from app.graph.agent import agent_graph
 from app.graph.approval import approval_node
 from app.graph.clarify import ask_order_no_node
 from app.graph.decision import decision_node
+from app.graph.handover import handover_node
 from app.graph.router import router_node
 from app.graph.state import CustomerServiceState
 from app.graph.tech import tech_node
 from app.utils.logger import get_logger
 
 logger = get_logger("main_graph")
-
-
-def complaint_placeholder(state: CustomerServiceState) -> dict:
-    """投诉/澄清失败的转人工占位（迭代4 实现坐席接管）"""
-    return {"messages": [("assistant", "已为您转接人工客服，请稍候。（坐席接管功能将在后续迭代上线）")]}
 
 
 def route(state: CustomerServiceState):
@@ -47,7 +43,7 @@ def route(state: CustomerServiceState):
         return "ask_order_no"
 
     if intent == "complaint":
-        return "complaint_placeholder"
+        return "handover"  # 转人工（迭代4：投诉/主动转人工/澄清失败都汇聚到这）
 
     return "customer_agent"
 
@@ -60,18 +56,18 @@ builder.add_node("aftersale", aftersale_node)            # 售后核实（comple
 builder.add_node("decision", decision_node)              # 交叉核验
 builder.add_node("approval", approval_node)              # 审批/回复
 builder.add_node("ask_order_no", ask_order_no_node)      # 槽位澄清：追问订单号（迭代3）
-builder.add_node("complaint_placeholder", complaint_placeholder)
+builder.add_node("handover", handover_node)              # 转人工（迭代4）
 
 builder.add_edge(START, "router")
 builder.add_conditional_edges(
     "router",
     route,
-    ["customer_agent", "tech", "aftersale", "ask_order_no", "complaint_placeholder"],
+    ["customer_agent", "tech", "aftersale", "ask_order_no", "handover"],
 )
 
-# simple / complaint / 澄清追问 分支直达 END
+# simple / 转人工 / 澄清追问 分支直达 END
 builder.add_edge("customer_agent", END)
-builder.add_edge("complaint_placeholder", END)
+builder.add_edge("handover", END)
 builder.add_edge("ask_order_no", END)
 
 # complex 分支：tech 和 aftersale 都完成后汇聚到 decision → approval → END

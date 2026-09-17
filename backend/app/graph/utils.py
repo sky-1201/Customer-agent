@@ -13,16 +13,6 @@ def extract_order_no(text: str) -> str | None:
     return m.group() if m else None
 
 
-def extract_order_no_from_history(messages: list) -> str | None:
-    """从消息历史提取订单号（从后往前找，用户最新给的优先）"""
-    for m in reversed(messages):
-        if getattr(m, "type", "") == "human":
-            found = extract_order_no(m.content or "")
-            if found:
-                return found
-    return None
-
-
 def recent_user_texts(state: CustomerServiceState, n: int = 3) -> str:
     """拼接最近 n 条用户消息作为完整诉求。
 

@@ -39,7 +39,11 @@ def decision_node(state: CustomerServiceState) -> dict:
             "交叉核验缺少输入",
             extra={"tech": tech is not None, "aftersale": aftersale is not None},
         )
-        return {"messages": [("assistant", "抱歉，核实信息不完整，请稍后再试。")]}
+        # final_decision 置 None：清掉上一个案件的陈旧结论，防 approval 节点误读
+        return {
+            "messages": [("assistant", "抱歉，核实信息不完整，请稍后再试。")],
+            "final_decision": None,
+        }
 
     try:
         result = decision_llm.invoke(

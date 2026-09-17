@@ -32,16 +32,23 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from slowapi.errors import RateLimitExceeded
 
 from app.api.approval import router as approval_router
 from app.api.auth import router as auth_router
 from app.api.catalog import router as catalog_router
 from app.api.chat import router as chat_router
+from app.api.handover import router as handover_router
 from app.api.kb import router as kb_router
+from app.api.session import router as session_router
+from app.api.stats import router as stats_router
+from app.api.ws import router as ws_router
 from app.config import ROOT_DIR
 from app.graph.main import checkpoint_pool
-from app.utils.logger import setup_logging
+from app.utils.limiter import limiter
+from app.utils.logger import attach_file_logging, setup_logging
 
 # 日志配置（结构化 JSON + trace_id，见 docs/日志规范.md）
 setup_logging()
@@ -49,13 +56,24 @@ setup_logging()
 
 @asynccontextmanager
 async def lifespan(app):
-    """启动时打开 checkpoint 异步连接池，关闭时释放"""
+    """启动时：落盘日志（须在 uvicorn 完成日志配置后 attach）+ 打开 checkpoint 连接池"""
+    attach_file_logging(ROOT_DIR / "logs")
     await checkpoint_pool.open()
     yield
     await checkpoint_pool.close()
 
 
 app = FastAPI(title="智能笔记本售后客服", lifespan=lifespan)
+
+# 迭代5：API 限流（slowapi，按客户端 IP）
+app.state.limiter = limiter
+
+
+@app.exception_handler(RateLimitExceeded)
+def rate_limit_handler(request, exc):
+    """429 友好返回"""
+    return JSONResponse(status_code=429, content={"detail": "请求太频繁，请稍后再试"})
+
 
 # 开发期放开 CORS，方便前端联调
 app.add_middleware(
@@ -71,6 +89,10 @@ app.include_router(chat_router, prefix="/api")
 app.include_router(approval_router, prefix="/api")
 app.include_router(catalog_router, prefix="/api")
 app.include_router(kb_router, prefix="/api")
+app.include_router(handover_router, prefix="/api")
+app.include_router(session_router, prefix="/api")
+app.include_router(stats_router, prefix="/api")
+app.include_router(ws_router)  # WebSocket（/ws/*，无 /api 前缀）
 
 
 @app.get("/health")

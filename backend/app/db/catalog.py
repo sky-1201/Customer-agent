@@ -9,6 +9,49 @@ from app.utils.logger import get_logger
 
 logger = get_logger("catalog_db")
 
+# 订单状态机（迭代5）：合法流转表，禁止非法流转
+ALLOWED_TRANSITIONS = {
+    "已完成": {"退换货中"},
+    "退换货中": {"已退换"},
+    "已退换": set(),  # 终态
+}
+
+
+def transition_order_by_no(order_no: str, user_id: int, to_status: str, reason: str) -> bool:
+    """订单状态流转（带状态机校验 + 流转日志，全程可追溯）
+
+    只允许 ALLOWED_TRANSITIONS 里的流转（如 已完成→退换货中），
+    非法流转拒绝并记 WARNING（如 已完成→已退换 跳步、终态再流转）。
+    """
+    sql_get = "SELECT id, status FROM orders WHERE order_no = %s AND user_id = %s"
+    sql_update = "UPDATE orders SET status = %s WHERE id = %s"
+    sql_log = """
+        INSERT INTO order_events (order_id, from_status, to_status, reason)
+        VALUES (%s, %s, %s, %s)
+    """
+    with engine.raw_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql_get, (order_no, user_id))
+            row = cur.fetchone()
+            if row is None:
+                logger.warning("状态流转失败：订单不存在", extra={"order_no": order_no})
+                return False
+            order_id, from_status = row
+            if to_status not in ALLOWED_TRANSITIONS.get(from_status, set()):
+                logger.warning(
+                    "非法订单流转被拒绝",
+                    extra={"order_no": order_no, "from": from_status, "to": to_status},
+                )
+                return False
+            cur.execute(sql_update, (to_status, order_id))
+            cur.execute(sql_log, (order_id, from_status, to_status, reason))
+        conn.commit()
+    logger.info(
+        "订单状态流转",
+        extra={"order_no": order_no, "from": from_status, "to": to_status, "reason": reason},
+    )
+    return True
+
 
 def list_products() -> list[dict]:
     """商品列表（21 个笔记本）"""
@@ -98,6 +141,12 @@ def get_order(order_id: int, user_id: int) -> dict | None:
         WHERE r.order_id = %s
         ORDER BY r.repair_date
     """
+    sql_events = """
+        SELECT from_status, to_status, reason, created_at
+        FROM order_events
+        WHERE order_id = %s
+        ORDER BY id
+    """
     with engine.raw_connection() as conn:
         with conn.cursor(row_factory=dict_row) as cur:
             cur.execute(sql_order, (order_id, user_id))
@@ -106,4 +155,6 @@ def get_order(order_id: int, user_id: int) -> dict | None:
                 return None
             cur.execute(sql_repairs, (order_id,))
             order["repairs"] = cur.fetchall()
+            cur.execute(sql_events, (order_id,))
+            order["events"] = cur.fetchall()  # 状态流转记录（迭代5）
     return order

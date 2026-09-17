@@ -1,7 +1,7 @@
 """管理端审批接口（待审批列表 + 提交审批触发 resume）
 
-鉴权说明（迭代1 决策）：管理端接口（列表/提交）暂不设防，由演示者本地使用，
-迭代5 安全加固时补坐席鉴权。C 端轮询接口（/approvals/status）必须登录 + 校验归属。
+鉴权说明（迭代5）：管理端接口要求登录（任一用户），坐席角色体系留待后续。
+C 端轮询接口（/approvals/status）登录 + 服务端拼接 thread_id 校验归属。
 """
 from fastapi import APIRouter, Depends, HTTPException
 from langgraph.types import Command
@@ -22,8 +22,8 @@ class ApprovalRequest(BaseModel):
 
 
 @router.get("/approvals")
-def get_approvals():
-    """待审批列表（管理端）"""
+def get_approvals(user_id: int = Depends(get_current_user)):
+    """待审批列表（管理端，需登录）"""
     return list_approvals()
 
 
@@ -52,8 +52,10 @@ async def approval_status(session_id: str, user_id: int = Depends(get_current_us
 
 
 @router.post("/approvals/{approval_id}")
-async def submit_approval(approval_id: int, req: ApprovalRequest):
-    """提交审批：更新状态 + resume 恢复暂停的图"""
+async def submit_approval(
+    approval_id: int, req: ApprovalRequest, user_id: int = Depends(get_current_user)
+):
+    """提交审批：更新状态 + resume 恢复暂停的图（管理端，需登录）"""
     approval = get_approval(approval_id)
     if not approval:
         return {"error": "审批单不存在"}

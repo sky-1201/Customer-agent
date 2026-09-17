@@ -10,6 +10,12 @@
 """
 from langchain_core.messages import SystemMessage
 
+import sys
+
+# Windows 中文控制台默认 GBK 编码，打印 ✓/✗ 会崩溃，强制 UTF-8 输出
+if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
+    sys.stdout.reconfigure(encoding="utf-8")
+
 from app.graph.router import ROUTER_PROMPT, router_llm, rule_triage
 from app.utils.logger import get_logger
 

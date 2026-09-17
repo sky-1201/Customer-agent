@@ -72,8 +72,8 @@ def get_approval(approval_id: int) -> dict | None:
 
 
 def update_approval(approval_id: int, status: str) -> None:
-    """更新审批单状态（pending → approved/rejected）"""
-    sql = "UPDATE approvals SET status = %s WHERE id = %s"
+    """更新审批单状态（pending → approved/rejected），记录审批完成时间（审批时长统计）"""
+    sql = "UPDATE approvals SET status = %s, decided_at = now() WHERE id = %s"
     with engine.raw_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(sql, (status, approval_id))

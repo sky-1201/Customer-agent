@@ -160,7 +160,72 @@ export async function fetchApprovalStatus(sessionId) {
   return res.json()
 }
 
+// ========== 接管（管理端，迭代4）==========
+
+export async function fetchHandovers(status) {
+  const res = await request('/api/handovers' + (status ? `?status=${status}` : ''))
+  return res.json()
+}
+
+export async function fetchHandoverDetail(id) {
+  const res = await request(`/api/handovers/${id}`)
+  return res.json()
+}
+
+export async function takeHandover(id) {
+  const res = await post(`/api/handovers/${id}/take`, {})
+  return res.json()
+}
+
+export async function sendHandoverMessage(id, content) {
+  const res = await post(`/api/handovers/${id}/messages`, { content })
+  return res.json()
+}
+
+export async function closeHandover(id) {
+  const res = await post(`/api/handovers/${id}/close`, {})
+  return res.json()
+}
+
+export async function returnHandover(id) {
+  const res = await post(`/api/handovers/${id}/return`, {})
+  return res.json()
+}
+
+// ========== 会话管理（迭代5）==========
+
+export async function fetchSessions() {
+  const res = await request('/api/sessions')
+  return res.json()
+}
+
+export async function archiveSession(sessionId) {
+  const res = await request(`/api/sessions/${encodeURIComponent(sessionId)}`, { method: 'DELETE' })
+  return res.json()
+}
+
+// ========== 指标（迭代5，管理端）==========
+
+export async function fetchMetrics() {
+  const res = await request('/api/metrics')
+  return res.json()
+}
+
+// ========== WebSocket（迭代4）==========
+
+// 建立 WS 连接（经 vite 代理 ws:true 转发到后端），返回 WebSocket 实例
+export function connectWs(path) {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws'
+  return new WebSocket(`${proto}://${location.host}${path}`)
+}
+
 // ========== 对话（SSE 流式）==========
+
+// 会话历史（服务端 checkpoint 是唯一事实源）
+export async function fetchChatHistory(sessionId) {
+  const res = await request(`/api/chat/history?session_id=${encodeURIComponent(sessionId)}`)
+  return res.json()
+}
 
 // sessionId 只是会话标识，不含身份；服务端拼 user_id 成 thread_id（防越权）
 export async function chat(message, sessionId, onEvent) {

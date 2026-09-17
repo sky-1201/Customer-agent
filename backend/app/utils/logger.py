@@ -71,6 +71,28 @@ def setup_logging(level: int = logging.INFO) -> None:
         logging.getLogger(noisy).setLevel(logging.WARNING)
 
 
+def attach_file_logging(log_dir) -> None:
+    """追加文件日志（logs/app.log，滚动切割，本地排障用）。
+
+    必须在 FastAPI lifespan 里调用，不能在模块导入期：
+    uvicorn 启动时会用它自己的 log config 重刷 logger handler，
+    导入期 attach 的 handler 会被刷掉。
+    """
+    from logging.handlers import RotatingFileHandler
+
+    log_dir.mkdir(parents=True, exist_ok=True)
+    fh = RotatingFileHandler(
+        log_dir / "app.log", maxBytes=10 * 1024 * 1024, backupCount=3, encoding="utf-8"
+    )
+    fh.setFormatter(JsonFormatter())
+    # root：应用日志（经 propagate 汇聚）；uvicorn.*：ASGI 异常/访问日志
+    # （uvicorn 的 logger propagate=False 且有独立 handler，需单独 attach）
+    for name in ("", "uvicorn", "uvicorn.error"):
+        lg = logging.getLogger(name)
+        if not any(isinstance(h, RotatingFileHandler) for h in lg.handlers):
+            lg.addHandler(fh)
+
+
 def get_logger(name: str) -> logging.Logger:
     """获取带模块名的 logger（推荐 logger = get_logger(__name__)）"""
     return logging.getLogger(name)

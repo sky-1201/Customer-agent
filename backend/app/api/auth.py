@@ -5,11 +5,12 @@
 - 其余 C 端接口通过 get_current_user 依赖从 token 解析 user_id
 """
 import jwt
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 
 from app.db import users as users_db
+from app.utils.limiter import limiter
 from app.utils.logger import get_logger
 from app.utils.security import create_token, decode_token
 
@@ -26,7 +27,8 @@ class AuthRequest(BaseModel):
 
 
 @router.post("/auth/register")
-def register(req: AuthRequest):
+@limiter.limit("20/minute")  # 迭代5：限流防批量注册
+def register(request: Request, req: AuthRequest):
     """注册（成功即登录，直接返回 token）"""
     if len(req.password.encode("utf-8")) > MAX_PASSWORD_BYTES:
         raise HTTPException(status_code=400, detail="密码过长（不超过 72 字节）")
@@ -38,7 +40,8 @@ def register(req: AuthRequest):
 
 
 @router.post("/auth/login")
-def login(req: AuthRequest):
+@limiter.limit("20/minute")  # 迭代5：限流防密码爆破
+def login(request: Request, req: AuthRequest):
     """登录：校验密码，签发 JWT"""
     user_id = users_db.verify_user(req.username, req.password)
     if user_id is None:

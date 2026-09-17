@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 
 from app.config import DASHSCOPE_API_KEY, DASHSCOPE_BASE_URL, ROUTER_MODEL
 from app.graph.state import CustomerServiceState
-from app.graph.utils import extract_order_no, extract_order_no_from_history
+from app.graph.utils import extract_order_no
 from app.utils.logger import get_logger
 
 logger = get_logger("router")
@@ -19,6 +19,8 @@ logger = get_logger("router")
 # 规则快筛关键词（第1层，零 LLM 调用）
 HIGH_RISK_KEYWORDS = ["投诉", "曝光", "12315", "消协", "差评", "退一赔三"]
 REFUND_KEYWORDS = ["退款", "退货", "换货", "换新", "赔偿"]
+# 主动转人工（迭代4：和投诉一样进 handover 分支）
+HANDOVER_KEYWORDS = ["转人工", "人工客服", "真人客服", "人工服务", "真人"]
 # 纯问候语（简单打招呼，直接 simple，避免模糊问候被低置信度兜底成 complex）
 GREETINGS = {"你好", "您好", "在吗", "在不在", "hi", "hello", "哈喽", "嗨"}
 
@@ -59,13 +61,15 @@ ROUTER_PROMPT = """你是客服分流器，判断用户消息应该走哪条处�
 
 
 def rule_triage(text: str) -> str | None:
-    """规则快筛：纯问候 → simple；高险词 → complaint；退款词 → complex"""
+    """规则快筛：纯问候 → simple；高险词/主动转人工 → complaint（转人工）；退款词 → complex"""
     t = text.strip().lower()
     # 纯问候 → simple（模糊问候 LLM 置信度低，避免被兜底成 complex 触发误审批）
     if t in GREETINGS or (len(t) <= 5 and any(g in t for g in GREETINGS)):
         return "simple"
     if any(k in text for k in HIGH_RISK_KEYWORDS):
         return "complaint"
+    if any(k in text for k in HANDOVER_KEYWORDS):
+        return "complaint"  # 用户主动要求转人工
     if any(k in text for k in REFUND_KEYWORDS):
         return "complex"
     return None
@@ -75,10 +79,10 @@ def handle_order_no_clarify(state: CustomerServiceState) -> dict:
     """澄清上下文：上一轮在等用户补充订单号，本条消息按澄清回答处理（不重新分类）"""
     last_user = state["messages"][-1].content
 
-    # 高风险词优先：用户在澄清过程中表达投诉 → 立即放弃澄清转人工
+    # 高风险词/主动转人工优先：用户在澄清过程中表达投诉或要求人工 → 立即放弃澄清转人工
     # （投诉 100% 召回是红线，不能被澄清流程吞掉）
-    if any(k in last_user for k in HIGH_RISK_KEYWORDS):
-        logger.info("澄清中命中高风险词，放弃澄清转人工", extra={"query": last_user[:30]})
+    if any(k in last_user for k in HIGH_RISK_KEYWORDS + HANDOVER_KEYWORDS):
+        logger.info("澄清中命中高风险/转人工词，放弃澄清转人工", extra={"query": last_user[:30]})
         return {
             "intent": "complaint",
             "intent_confidence": 1.0,
@@ -166,14 +170,12 @@ def router_node(state: CustomerServiceState) -> dict:
 
     updates = {"intent": intent, "intent_confidence": confidence, "risk_signals": signals}
 
-    # 复杂售后：锁定订单号（优先级：最后一条消息 > 历史消息 > state 已有）。
-    # 用户可能上几轮就报过订单号，也可能这轮换了个新订单号（覆盖旧的）。
+    # 复杂售后：锁定订单号（优先级：最后一条消息 > state 已有）。
+    # ⚠️ 不扫历史消息：旧案件的订单号会永久留在历史里，扫历史会导致新案件
+    # 静默继承旧订单号（张冠李戴核实错订单）。state.order_no 也只在一个案件
+    # 内有效——案件完结时由 approval 节点清空，新案件重新追问。
     if intent == "complex":
-        candidate = (
-            extract_order_no(last_user)
-            or extract_order_no_from_history(state["messages"][:-1])
-            or state.get("order_no")
-        )
+        candidate = extract_order_no(last_user) or state.get("order_no")
         if candidate and candidate != state.get("order_no"):
             logger.info("锁定订单号", extra={"order_no": candidate})
             updates["order_no"] = candidate
